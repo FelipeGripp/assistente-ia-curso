@@ -1,2 +1,5 @@
 .env
 vetores.db
+*.pdf
+*.docx
+documentos/
