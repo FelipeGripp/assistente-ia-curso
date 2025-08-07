@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from responder_ia import responder
+import os
 
 app = Flask(__name__)
 
@@ -18,4 +19,5 @@ def responder_endpoint():
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
