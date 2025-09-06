@@ -3,13 +3,21 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from docx import Document
-import sqlite3
+import psycopg2
 import tiktoken
 import json  
 
+# 🔑 Carregar API Key
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
+
+# ⚡ Configuração do Postgres
+DB_NAME = os.getenv("PGDATABASE")
+DB_USER = os.getenv("PGUSER")
+DB_PASSWORD = os.getenv("PGPASSWORD")
+DB_HOST = os.getenv("PGHOST")
+DB_PORT = os.getenv("PGPORT", "5432")
 
 def contar_tokens(texto, model="gpt-4o"):
     encoding = tiktoken.encoding_for_model(model)
@@ -39,22 +47,28 @@ def extrair_texto_docx(caminho):
     return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
 
 def criar_banco():
-    conn = sqlite3.connect("vetores.db")
-    c = conn.cursor()
-    c.execute('''
+    """Cria tabela embeddings no PostgreSQL se não existir"""
+    conn = psycopg2.connect(
+        dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT
+    )
+    cur = conn.cursor()
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS embeddings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             texto TEXT,
-            embedding BLOB
+            embedding JSONB
         )
     ''')
     conn.commit()
     conn.close()
 
 def processar_texto(texto):
+    """Divide em chunks, gera embeddings e insere no PostgreSQL"""
     chunks = dividir_em_chunks(texto)
-    conn = sqlite3.connect("vetores.db")
-    c = conn.cursor()
+    conn = psycopg2.connect(
+        dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT
+    )
+    cur = conn.cursor()
 
     for chunk in chunks:
         response = client.embeddings.create(
@@ -62,19 +76,26 @@ def processar_texto(texto):
             model="text-embedding-3-small"
         )
         vetor = response.data[0].embedding
-        vetor_json = json.dumps(vetor) 
-        c.execute("INSERT INTO embeddings (texto, embedding) VALUES (?, ?)", (chunk, vetor_json))
+        vetor_json = json.dumps(vetor)
+
+        cur.execute(
+            "INSERT INTO embeddings (texto, embedding) VALUES (%s, %s)",
+            (chunk, vetor_json)
+        )
 
     conn.commit()
     conn.close()
 
-
 def processar_arquivo(caminho):
+    """Detecta extensão e processa arquivo"""
     if caminho.endswith(".pdf"):
         texto = extrair_texto_pdf(caminho)
     elif caminho.endswith(".docx"):
         texto = extrair_texto_docx(caminho)
     else:
-        print("Formato não suportado.")
+        print(f"Formato não suportado: {caminho}")
         return
+    
+    print(f"📄 Processando: {caminho}...")
     processar_texto(texto)
+    print(f"✅ Finalizado: {caminho}")
