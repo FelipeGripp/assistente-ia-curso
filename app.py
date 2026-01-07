@@ -10,7 +10,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://front-rico.onrender.com",  # Sua URL do frontend
+            "http://localhost:5173",             # Para desenvolvimento local
+            "http://localhost:3000"              # Para desenvolvimento local
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True
+    }
+})
 
 # Conexão com o MongoDB Atlas
 MONGO_URI = os.getenv("MONGO_URI")
